@@ -4,6 +4,8 @@
 
 **Developer preview · Apache-2.0**
 
+[![Source preview checks](https://github.com/PhantomBugz/lived-lora-studio/actions/workflows/source-smoke.yml/badge.svg)](https://github.com/PhantomBugz/lived-lora-studio/actions/workflows/source-smoke.yml)
+
 liveD LoRA Studio is a workbench for preparing technical examples for model adaptation. This preview lets developers inspect a real slice of its local workflow: encrypted storage, explicit human review, and an encrypted export containing only approved examples. It also introduces a target picker for a specific NVIDIA GPU on a local or remote machine.
 
 The source preview is intentionally small. It does not ship the full desktop application, a model trainer, an installer, or a trained model. A selected GPU is an observed target until its CUDA runtime and a training recipe have passed separate checks. See [release status](docs/STATUS.md).
