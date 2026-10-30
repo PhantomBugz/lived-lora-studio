@@ -44,17 +44,28 @@ def make_private_file(path: Path) -> None:
 
 def create_model_tree(release: Path, payload: bytes = b"installed model") -> Path:
     model = release / "resources" / "embedding-model" / "all-MiniLM-L6-v2"
-    model.mkdir(parents=True)
-    for directory in (
+    directories = (
         release,
         release / "resources",
         release / "resources" / "embedding-model",
         model,
-    ):
-        make_private_directory(directory)
+    )
+    if os.name == "nt":
+        # Elevated Windows runners can assign Administrators as the default
+        # owner. Build the private-at-creation fixture required by this reader.
+        for directory in directories:
+            paths_module._create_private_windows_directory(directory)
+    else:
+        model.mkdir(parents=True)
+        for directory in directories:
+            make_private_directory(directory)
     target = model / "vocab.txt"
-    target.write_bytes(payload)
-    make_private_file(target)
+    if os.name == "nt":
+        with os.fdopen(paths_module._create_private_windows_file(target), "wb") as stream:
+            stream.write(payload)
+    else:
+        target.write_bytes(payload)
+        make_private_file(target)
     return model
 
 
