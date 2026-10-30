@@ -1,0 +1,30 @@
+name: Source preview checks
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  preview:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Run one-command review and export demo
+        run: python scripts/quickstart_preview.py
+      - name: Check GPU selector and picker state
+        run: python -B -m unittest tests.test_gpu_selection tests.test_gpu_picker_model -v
+      - name: Check local data path
+        run: python -B -m unittest tests.test_exporter tests.test_quality tests.test_blueprints tests.test_source_artifacts tests.test_paths -v

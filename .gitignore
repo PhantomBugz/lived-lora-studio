@@ -1,0 +1,17 @@
+.venv/
+.venv-preview/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.log
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+*.sqlite3
+*.db
+studio_data/
+exports/
+selected-gpu*.json
