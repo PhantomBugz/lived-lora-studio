@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="360" viewBox="0 0 1200 360" role="img" aria-labelledby="title desc">
+  <title id="title">liveD LoRA Studio developer preview workflow</title>
+  <desc id="desc">An encrypted local vault leads to human review, then an encrypted export containing approved examples only. Rejected and pending examples are excluded. A separate read-only picker discovers and selects an exact local or remote NVIDIA GPU UUID; it does not start training.</desc>
+  <defs>
+    <linearGradient id="surface" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#010608"/>
+      <stop offset="0.6" stop-color="#03161b"/>
+      <stop offset="1" stop-color="#010608"/>
+    </linearGradient>
+    <linearGradient id="cyanEdge" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#00e7ff" stop-opacity="0.85"/>
+      <stop offset="1" stop-color="#55f6a5" stop-opacity="0.65"/>
+    </linearGradient>
+    <pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse">
+      <path d="M32 0H0V32" fill="none" stroke="#0a3b43" stroke-width="1" opacity="0.26"/>
+    </pattern>
+  </defs>
+
+  <rect width="1200" height="360" fill="url(#surface)"/>
+  <rect width="1200" height="360" fill="url(#grid)"/>
+  <path d="M0 52H1200M0 340H1200" stroke="#00e7ff" stroke-opacity="0.25"/>
+  <path d="M24 12V43M1176 12V43M24 348V318M1176 348V318" stroke="#00e7ff" stroke-opacity="0.65" stroke-width="2"/>
+
+  <text x="36" y="34" fill="#53f5ff" font-family="Arial, Helvetica, sans-serif" font-size="17" letter-spacing="3">liveD // REVIEW PATH</text>
+  <rect x="990" y="12" width="174" height="28" rx="4" fill="#0b3036" stroke="#267783"/>
+  <text x="1077" y="31" text-anchor="middle" fill="#eafcff" font-family="Arial, Helvetica, sans-serif" font-size="14" letter-spacing="1.5">SOURCE PREVIEW</text>
+
+  <g font-family="Arial, Helvetica, sans-serif">
+    <rect x="36" y="70" width="328" height="146" rx="8" fill="#041418" stroke="url(#cyanEdge)" stroke-width="2"/>
+    <path d="M36 88V78Q36 70 44 70H119" fill="none" stroke="#55f6a5" stroke-width="4"/>
+    <text x="59" y="103" fill="#55f6a5" font-family="Arial, Helvetica, sans-serif" font-size="16" letter-spacing="2">01 / LOCAL</text>
+    <text x="59" y="145" fill="#eafcff" font-family="Arial, Helvetica, sans-serif" font-size="26" font-weight="700">ENCRYPTED VAULT</text>
+    <text x="59" y="180" fill="#a8c9cc" font-family="Arial, Helvetica, sans-serif" font-size="17">Synthetic examples at rest</text>
+
+    <rect x="436" y="70" width="328" height="146" rx="8" fill="#041418" stroke="url(#cyanEdge)" stroke-width="2"/>
+    <path d="M436 88V78Q436 70 444 70H519" fill="none" stroke="#55f6a5" stroke-width="4"/>
+    <text x="459" y="103" fill="#55f6a5" font-family="Arial, Helvetica, sans-serif" font-size="16" letter-spacing="2">02 / DECIDE</text>
+    <text x="459" y="145" fill="#eafcff" font-family="Arial, Helvetica, sans-serif" font-size="26" font-weight="700">HUMAN REVIEW</text>
+    <text x="459" y="180" fill="#a8c9cc" font-family="Arial, Helvetica, sans-serif" font-size="17">Approve, reject, or defer</text>
+
+    <rect x="836" y="70" width="328" height="146" rx="8" fill="#041418" stroke="url(#cyanEdge)" stroke-width="2"/>
+    <path d="M836 88V78Q836 70 844 70H919" fill="none" stroke="#55f6a5" stroke-width="4"/>
+    <text x="859" y="103" fill="#55f6a5" font-family="Arial, Helvetica, sans-serif" font-size="16" letter-spacing="2">03 / RELEASE DATA</text>
+    <text x="859" y="145" fill="#eafcff" font-family="Arial, Helvetica, sans-serif" font-size="26" font-weight="700">ENCRYPTED EXPORT</text>
+    <text x="859" y="180" fill="#a8c9cc" font-family="Arial, Helvetica, sans-serif" font-size="17">Approved examples only</text>
+  </g>
+
+  <path d="M375 143H425M775 143H825" stroke="#53f5ff" stroke-width="2"/>
+  <path d="M418 137L426 143L418 149M818 137L826 143L818 149" fill="none" stroke="#53f5ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M600 216V241H515V255" fill="none" stroke="#ffd166" stroke-width="1.5" stroke-dasharray="5 5"/>
+  <circle cx="600" cy="216" r="3" fill="#ffd166"/>
+
+  <rect x="36" y="255" width="528" height="62" rx="7" fill="#271d0d" stroke="#80612f"/>
+  <text x="58" y="280" fill="#ffd166" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="700">REJECTED + PENDING</text>
+  <text x="58" y="303" fill="#c4b99d" font-family="Arial, Helvetica, sans-serif" font-size="15">Excluded from the approved export</text>
+
+  <rect x="660" y="255" width="504" height="62" rx="7" fill="#041418" stroke="#2b8b98" stroke-width="1.5" stroke-dasharray="6 4"/>
+  <text x="682" y="280" fill="#53f5ff" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="700">SEPARATE GPU TARGET PICKER</text>
+  <text x="682" y="303" fill="#a8c9cc" font-family="Arial, Helvetica, sans-serif" font-size="15">Local / SSH remote NVIDIA UUID / no training</text>
+
+  <text x="36" y="334" fill="#84a8aa" font-family="Arial, Helvetica, sans-serif" font-size="13" letter-spacing="1">SYNTHETIC DEMO DATA</text>
+  <text x="1164" y="334" text-anchor="end" fill="#84a8aa" font-family="Arial, Helvetica, sans-serif" font-size="13" letter-spacing="1">PHANTOMBUGZ / APACHE-2.0</text>
+</svg>

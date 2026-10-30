@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import stat
 from threading import Lock, RLock
 import time
 from typing import Callable, Iterable
@@ -23,13 +24,14 @@ from .history_anchor import (
 )
 
 from .paths import (
+    PathRaceError,
     UnsafePathError,
     _checked_lstat,
+    _create_private_windows_file,
     _entry_identity,
     _make_checked_directory,
     _require_private_directory,
     _require_private_file,
-    _set_private_windows_acl,
 )
 from .training_models import TrainingMode
 from .training_limits import DATASET_MAX_BYTES, DATASET_MAX_RECORDS
@@ -206,11 +208,15 @@ def _fsync_directory(path: Path) -> None:
 
 
 def _write_new_private(path: Path, payload: bytes) -> None:
-    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
-    if hasattr(os, "O_BINARY"):
-        flags |= os.O_BINARY
-    descriptor = os.open(path, flags, 0o600)
+    if os.name == "nt":
+        descriptor = _create_private_windows_file(path)
+    else:
+        descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     try:
+        opened = os.fstat(descriptor)
+        if not stat.S_ISREG(opened.st_mode) or opened.st_nlink != 1:
+            raise UnsafePathError("dataset snapshot file handle is unsafe")
+        identity = _entry_identity(opened)
         view = memoryview(payload)
         while view:
             written = os.write(descriptor, view)
@@ -218,13 +224,14 @@ def _write_new_private(path: Path, payload: bytes) -> None:
                 raise OSError("dataset snapshot write made no progress")
             view = view[written:]
         os.fsync(descriptor)
+        if os.name != "nt":
+            os.fchmod(descriptor, 0o600)
+        if _entry_identity(os.fstat(descriptor)) != identity:
+            raise PathRaceError("dataset snapshot file handle changed")
     finally:
         os.close(descriptor)
-    if os.name == "nt":
-        _set_private_windows_acl(path, directory=False)
-    else:
-        os.chmod(path, 0o600, follow_symlinks=False)
-    _require_private_file(path)
+    if _entry_identity(_require_private_file(path)) != identity:
+        raise PathRaceError("dataset snapshot file path changed")
 
 
 def _process_lock_for(path: Path) -> RLock:

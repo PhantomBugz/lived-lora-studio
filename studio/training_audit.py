@@ -20,10 +20,11 @@ from .paths import (
     UnsafePathError,
     _absolute_lexical,
     _checked_lstat,
+    _create_private_windows_directory,
+    _create_private_windows_file,
     _entry_identity,
     _require_private_directory as _paths_require_private_directory,
     _require_private_file as _paths_require_private_file,
-    _set_private_windows_acl,
     _snapshot_chain,
 )
 from .training_models import (
@@ -737,13 +738,18 @@ class RunManifestWriter:
             if known:
                 raise AuditTamperError("authenticated run directory is missing") from None
             before = _snapshot_chain(self._root, require_target=True)
-            os.mkdir(candidate, 0o700)
             if os.name == "nt":
-                _set_private_windows_acl(candidate, directory=True)
+                created_identity = _create_private_windows_directory(candidate)
             else:
+                os.mkdir(candidate, 0o700)
                 os.chmod(candidate, 0o700, follow_symlinks=False)
             if _snapshot_chain(self._root, require_target=True) != before:
                 raise PathRaceError("run root changed while creating a run directory")
+            if (
+                os.name == "nt"
+                and _entry_identity(_checked_lstat(candidate)) != created_identity
+            ):
+                raise PathRaceError("created run directory changed")
         else:
             if not known:
                 raise AuditTamperError("new run identifier already has a filesystem object")
@@ -908,43 +914,7 @@ class RunManifestWriter:
                 flags |= int(getattr(os, option, 0))
             return os.open(path, flags, 0o600)
 
-        import msvcrt
-
-        kernel = ctypes.WinDLL("kernel32", use_last_error=True)
-        create = kernel.CreateFileW
-        create.argtypes = (
-            ctypes.c_wchar_p,
-            ctypes.c_uint32,
-            ctypes.c_uint32,
-            ctypes.c_void_p,
-            ctypes.c_uint32,
-            ctypes.c_uint32,
-            ctypes.c_void_p,
-        )
-        create.restype = ctypes.c_void_p
-        close = kernel.CloseHandle
-        close.argtypes = (ctypes.c_void_p,)
-        close.restype = ctypes.c_int
-        handle = create(
-            os.fspath(path),
-            0x80000000 | 0x40000000,
-            0x00000001 | 0x00000002 | 0x00000004,
-            None,
-            1,
-            0x00000080 | 0x00200000,
-            None,
-        )
-        if handle == ctypes.c_void_p(-1).value:
-            error = ctypes.get_last_error()
-            if error in (80, 183):
-                raise FileExistsError(path)
-            raise ctypes.WinError(error)
-        flags = os.O_RDWR | int(getattr(os, "O_BINARY", 0))
-        try:
-            return msvcrt.open_osfhandle(handle, flags)
-        except BaseException:
-            close(handle)
-            raise
+        return _create_private_windows_file(path, read_write=True)
 
     @staticmethod
     def _read_descriptor_bytes(
@@ -1022,9 +992,7 @@ class RunManifestWriter:
                 raise PathRaceError(
                     "manifest temporary path differs from its retained handle"
                 )
-            if os.name == "nt":
-                _set_private_windows_acl(temporary, directory=False)
-            else:
+            if os.name != "nt":
                 os.fchmod(descriptor, 0o600)
             opened = os.fstat(descriptor)
             path_opened = self._require_private_file(temporary)

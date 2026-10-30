@@ -1,5 +1,7 @@
 # liveD LoRA Studio
 
+![liveD LoRA Studio developer preview banner highlighting encrypted review, approved-only export, and separate GPU target selection](docs/assets/lived-hero.png)
+
 **Developer preview · Apache-2.0**
 
 liveD LoRA Studio is a workbench for preparing technical examples for model adaptation. This preview lets developers inspect a real slice of its local workflow: encrypted storage, explicit human review, and an encrypted export containing only approved examples. It also introduces a target picker for a specific NVIDIA GPU on a local or remote machine.
@@ -24,14 +26,16 @@ Checks passed: encrypted files contain no sample response plaintext
 
 The demo checks those claims as it runs and removes its temporary workspace afterward. [Read the walkthrough](docs/DEMO.md).
 
-```mermaid
-flowchart LR
-    A[Local synthetic capture] --> B[Encrypted vault]
-    B --> C{Human review}
-    C -->|Approve| D[Encrypted JSONL export]
-    C -->|Reject or leave pending| E[Excluded from export]
-    F[GPU inventory] --> G[Choose target and exact UUID]
-```
+<picture>
+  <source media="(prefers-reduced-motion: no-preference)" srcset="docs/assets/lived-demo-terminal.gif">
+  <img src="docs/assets/lived-demo-terminal-static.png" alt="Synthetic terminal demo: one approved, one rejected, one pending; the encrypted export includes only the approved record; the plaintext exclusion check passes. No GPU training is shown.">
+</picture>
+
+*Synthetic demo output. The animation reveals the three verified status lines; the static image is used when reduced motion is preferred.*
+
+![Synthetic workflow: encrypted local examples enter human review; approved examples alone enter an encrypted export, while a separate GPU picker observes a target without training](docs/assets/lived-pipeline.svg)
+
+*Synthetic preview workflow. [PNG version](docs/assets/lived-pipeline.png).*
 
 The GPU selection path is separate from the review/export demo. A future training runtime will join them only after its approval and execution checks pass.
 

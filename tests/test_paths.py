@@ -128,6 +128,7 @@ class InstalledEmbeddingPathTests(unittest.TestCase):
             fallback = (
                 Path("workspace/resources/embedding-model/all-MiniLM-L6-v2")
             )
+            paths_module._make_checked_directory(Path("workspace"))
             fallback.mkdir(parents=True)
             (fallback / "vocab.txt").write_bytes(b"mutable workspace")
 
@@ -289,6 +290,104 @@ class InstalledEmbeddingPathTests(unittest.TestCase):
             with patch("studio.paths._read_descriptor", side_effect=mutate_after_open):
                 with self.assertRaises(PathRaceError):
                     paths.secure_embedding_read_bytes("vocab.txt", maximum=64)
+
+
+@unittest.skipUnless(os.name == "nt", "Windows owner handling")
+class WindowsPrivateOwnerTests(unittest.TestCase):
+    def test_new_directory_has_private_owner_and_acl_at_creation(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            new = Path(temporary) / "new"
+            with patch.object(paths_module, "_set_private_windows_acl") as set_acl:
+                paths_module._make_checked_directory(new)
+            set_acl.assert_not_called()
+            paths_module._require_private_windows_acl(new)
+
+    def test_existing_nonprivate_directory_is_rejected_without_acl_change(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            existing = Path(temporary) / "existing"
+            existing.mkdir()
+            original_acl = subprocess.run(
+                ["icacls", os.fspath(existing)],
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout
+            with self.assertRaises(UnsafePathError):
+                paths_module._make_checked_directory(existing)
+            final_acl = subprocess.run(
+                ["icacls", os.fspath(existing)],
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout
+            self.assertEqual(final_acl, original_acl)
+
+    def test_existing_directory_with_foreign_owner_is_not_changed(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            existing = Path(temporary) / "existing"
+            existing.mkdir()
+            original_acl = subprocess.run(
+                ["icacls", os.fspath(existing)],
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout
+            with patch.object(
+                paths_module, "_windows_current_user_sid", return_value="S-1-0-0"
+            ):
+                with self.assertRaisesRegex(UnsafePathError, "owner"):
+                    paths_module._make_checked_directory(existing)
+            final_acl = subprocess.run(
+                ["icacls", os.fspath(existing)],
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout
+            self.assertEqual(final_acl, original_acl)
+
+    def test_replacement_after_private_creation_is_rejected(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            target = root / "target"
+            moved = root / "moved"
+            replacement = root / "replacement"
+            replacement.mkdir()
+
+            def create_then_replace(path: Path):
+                path.mkdir()
+                identity = paths_module._entry_identity(paths_module._checked_lstat(path))
+                path.rename(moved)
+                replacement.rename(path)
+                return identity
+
+            with (
+                patch.object(
+                    paths_module,
+                    "_create_private_windows_directory",
+                    side_effect=create_then_replace,
+                    create=True,
+                ),
+                patch.object(paths_module, "_set_private_windows_acl"),
+                patch.object(paths_module, "_require_private_directory"),
+            ):
+                with self.assertRaisesRegex(PathRaceError, "created directory changed"):
+                    paths_module._make_checked_directory(target)
+
+    def test_directory_appearing_during_creation_is_rejected(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            target = Path(temporary) / "target"
+
+            def competing_creation(path: Path):
+                path.mkdir()
+                raise FileExistsError("directory already exists")
+
+            with patch.object(
+                paths_module,
+                "_create_private_windows_directory",
+                side_effect=competing_creation,
+            ):
+                with self.assertRaisesRegex(PathRaceError, "appeared during creation"):
+                    paths_module._make_checked_directory(target)
 
 
 if __name__ == "__main__":

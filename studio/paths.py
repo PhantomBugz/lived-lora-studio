@@ -240,6 +240,137 @@ def _windows_current_user_sid() -> str:
         kernel.CloseHandle(token)
 
 
+def _create_private_windows_directory(path: Path) -> tuple[int, int, int]:
+    """Create with the exact owner and protected DACL in one Windows operation."""
+    ctypes, wintypes, advapi, kernel = _windows_api()
+
+    class SecurityAttributes(ctypes.Structure):
+        _fields_ = (
+            ("length", wintypes.DWORD),
+            ("descriptor", ctypes.c_void_p),
+            ("inherit_handle", wintypes.BOOL),
+        )
+
+    advapi.ConvertStringSecurityDescriptorToSecurityDescriptorW.argtypes = (
+        wintypes.LPCWSTR,
+        wintypes.DWORD,
+        ctypes.POINTER(ctypes.c_void_p),
+        ctypes.POINTER(wintypes.ULONG),
+    )
+    advapi.ConvertStringSecurityDescriptorToSecurityDescriptorW.restype = wintypes.BOOL
+    kernel.CreateDirectoryW.argtypes = (
+        wintypes.LPCWSTR,
+        ctypes.POINTER(SecurityAttributes),
+    )
+    kernel.CreateDirectoryW.restype = wintypes.BOOL
+
+    current_sid = _windows_current_user_sid()
+    descriptor_text = (
+        f"O:{current_sid}D:P"
+        f"(A;OICI;0x001F01FF;;;{current_sid})"
+        "(A;OICI;0x001F01FF;;;SY)"
+    )
+    descriptor = ctypes.c_void_p()
+    converted = advapi.ConvertStringSecurityDescriptorToSecurityDescriptorW(
+        descriptor_text, 1, ctypes.byref(descriptor), None
+    )
+    if not converted or not descriptor:
+        if descriptor:
+            kernel.LocalFree(descriptor)
+        raise UnsafePathError(
+            "private Windows directory descriptor could not be built"
+        )
+    try:
+        attributes = SecurityAttributes(
+            ctypes.sizeof(SecurityAttributes), descriptor, False
+        )
+        if not kernel.CreateDirectoryW(os.fspath(path), ctypes.byref(attributes)):
+            if ctypes.get_last_error() in (80, 183):
+                raise FileExistsError("directory already exists")
+            raise UnsafePathError("private Windows directory could not be created")
+    finally:
+        kernel.LocalFree(descriptor)
+    metadata = _checked_lstat(path)
+    if not stat.S_ISDIR(metadata.st_mode):
+        raise PathRaceError("created directory changed")
+    return _entry_identity(metadata)
+
+
+def _create_private_windows_file(path: Path, *, read_write: bool = False) -> int:
+    """Exclusively create a file with its private owner and DACL in place."""
+    import msvcrt
+
+    ctypes, wintypes, advapi, kernel = _windows_api()
+
+    class SecurityAttributes(ctypes.Structure):
+        _fields_ = (
+            ("length", wintypes.DWORD),
+            ("descriptor", ctypes.c_void_p),
+            ("inherit_handle", wintypes.BOOL),
+        )
+
+    advapi.ConvertStringSecurityDescriptorToSecurityDescriptorW.argtypes = (
+        wintypes.LPCWSTR,
+        wintypes.DWORD,
+        ctypes.POINTER(ctypes.c_void_p),
+        ctypes.POINTER(wintypes.ULONG),
+    )
+    advapi.ConvertStringSecurityDescriptorToSecurityDescriptorW.restype = wintypes.BOOL
+    kernel.CreateFileW.argtypes = (
+        wintypes.LPCWSTR,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        ctypes.POINTER(SecurityAttributes),
+        wintypes.DWORD,
+        wintypes.DWORD,
+        wintypes.HANDLE,
+    )
+    kernel.CreateFileW.restype = wintypes.HANDLE
+
+    current_sid = _windows_current_user_sid()
+    descriptor_text = (
+        f"O:{current_sid}D:P"
+        f"(A;;0x001F01FF;;;{current_sid})"
+        "(A;;0x001F01FF;;;SY)"
+    )
+    security_descriptor = ctypes.c_void_p()
+    if not advapi.ConvertStringSecurityDescriptorToSecurityDescriptorW(
+        descriptor_text, 1, ctypes.byref(security_descriptor), None
+    ) or not security_descriptor:
+        if security_descriptor:
+            kernel.LocalFree(security_descriptor)
+        raise UnsafePathError("private Windows file descriptor could not be built")
+    try:
+        attributes = SecurityAttributes(
+            ctypes.sizeof(SecurityAttributes), security_descriptor, False
+        )
+        handle = kernel.CreateFileW(
+            os.fspath(path),
+            0xC0000000 if read_write else 0x40000000,
+            0x00000001 | 0x00000002 | 0x00000004,  # preserve normal sharing
+            ctypes.byref(attributes),
+            1,  # CREATE_NEW
+            0x00000080 | 0x00200000,  # normal file, open reparse point itself
+            None,
+        )
+        if handle == ctypes.c_void_p(-1).value:
+            error = ctypes.get_last_error()
+            failure = ctypes.WinError(error)
+            failure.filename = os.fspath(path)
+            raise failure
+        try:
+            return msvcrt.open_osfhandle(
+                handle,
+                (os.O_RDWR if read_write else os.O_WRONLY)
+                | int(getattr(os, "O_BINARY", 0)),
+            )
+        except BaseException:
+            kernel.CloseHandle(handle)
+            raise
+    finally:
+        kernel.LocalFree(security_descriptor)
+
+
 def _set_private_windows_acl(
     path: Path, *, directory: bool, read_only: bool = False
 ) -> None:
@@ -290,7 +421,7 @@ def _set_private_windows_acl(
             sid = ctypes.c_void_p()
             if not advapi.ConvertStringSidToSidW(
                 sid_text, ctypes.byref(sid)
-            ):
+            ) or not sid:
                 raise UnsafePathError("private Windows SID could not be created")
             allocated.append(sid)
             entries[index] = ExplicitAccess(
@@ -497,6 +628,7 @@ def _require_private_file(
 def _make_checked_directory(path: Path) -> None:
     absolute = _absolute_lexical(path)
     chain = _path_chain(absolute)
+    created: dict[Path, tuple[int, int, int]] = {}
     for index, component in enumerate(chain):
         try:
             metadata = _checked_lstat(component)
@@ -506,21 +638,35 @@ def _make_checked_directory(path: Path) -> None:
             parent = chain[index - 1]
             before = _snapshot_chain(parent, require_target=True)
             try:
-                os.mkdir(component, 0o700)
+                if os.name == "nt":
+                    created[component] = _create_private_windows_directory(component)
+                else:
+                    os.mkdir(component, 0o700)
             except FileExistsError:
+                if os.name == "nt":
+                    raise PathRaceError("directory appeared during creation") from None
                 pass
             metadata = _checked_lstat(component)
             if _snapshot_chain(parent, require_target=True) != before:
                 raise PathRaceError("directory ancestry changed while it was created")
+            if component in created and _entry_identity(metadata) != created[component]:
+                raise PathRaceError("created directory changed")
         if not stat.S_ISDIR(metadata.st_mode):
             raise UnsafePathError(f"workspace directory is not a directory: {component}")
-    _snapshot_chain(absolute, require_target=True)
-    if os.name == "nt":
-        _set_private_windows_acl(absolute, directory=True)
-    else:
+    before = _snapshot_chain(absolute, require_target=True)
+    if os.name != "nt":
         os.chmod(absolute, 0o700, follow_symlinks=False)
-    _snapshot_chain(absolute, require_target=True)
+    # New Windows directories are private at creation. Existing ones are
+    # validated without rewriting ACLs on their possibly populated children.
+    after = _snapshot_chain(absolute, require_target=True)
+    if after != before:
+        raise PathRaceError("directory changed while securing it")
+    for component, identity in created.items():
+        if _entry_identity(_checked_lstat(component)) != identity:
+            raise PathRaceError("created directory changed")
     _require_private_directory(absolute)
+    if _snapshot_chain(absolute, require_target=True) != after:
+        raise PathRaceError("directory changed while validating it")
 
 
 def _read_descriptor(descriptor: int, maximum: int) -> bytes:

@@ -6,7 +6,7 @@ Thanks for helping improve liveD LoRA Studio. Keep changes focused and reproduci
 
 Include the operating system, Python version, exact command, expected result, observed result, and a minimal synthetic reproduction. Remove credentials, private keys, captured pages, browser profiles, vaults, SSH configuration, and real training records from logs or screenshots before sharing them.
 
-Use GitHub private vulnerability reporting for a security issue if it is enabled for the repository. Avoid posting exploit details in a public issue.
+For security issues, follow [SECURITY.md](SECURITY.md) and use GitHub private vulnerability reporting. Avoid posting exploit details in a public issue.
 
 ## Pull requests
 
